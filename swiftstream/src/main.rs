@@ -2,7 +2,7 @@ use std::{env, sync::Arc};
 
 use anyhow::Result;
 use axum::Router;
-use swiftstream_rs::{AppState, AppStateRef, load_config, routes};
+use swiftstream::{AppState, AppStateRef, load_config, routes};
 use tokio::net::TcpListener;
 
 async fn build_app(app_state: &AppStateRef) -> Result<Router> {

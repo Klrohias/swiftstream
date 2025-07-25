@@ -1,4 +1,4 @@
-use log::error;
+use log::{debug, error};
 use std::{
     collections::HashMap,
     sync::Arc,
@@ -15,7 +15,8 @@ use crate::caching::download;
 
 pub struct CachePool {
     cached: RwLock<HashMap<String, Arc<CacheItem>>>,
-    space_limit: usize,
+    time_limit_secs: u16,
+    size_limit: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -25,10 +26,11 @@ pub struct CacheResult {
 }
 
 impl CachePool {
-    pub fn new(space_limit: usize) -> Arc<Self> {
+    pub fn new(size_limit: usize, time_limit_secs: u16) -> Arc<Self> {
         Arc::new(CachePool {
             cached: RwLock::new(HashMap::new()),
-            space_limit,
+            size_limit,
+            time_limit_secs,
         })
     }
 
@@ -54,7 +56,7 @@ impl CachePool {
             return Some(item_ref.clone());
         }
 
-        if self.get_total_size().await > self.space_limit {
+        if self.get_total_size().await > self.size_limit {
             return None;
         }
 
@@ -83,7 +85,7 @@ impl CachePool {
         let cache_item = cache_item.unwrap();
 
         cache_item
-            .set_expire(SystemTime::now() + Duration::from_secs(30))
+            .set_expire(SystemTime::now() + Duration::from_secs(self.time_limit_secs.into()))
             .await;
 
         yield_now().await;
@@ -96,8 +98,9 @@ impl CachePool {
         Ok(data)
     }
 
-    pub async fn drop(self: &Arc<Self>, origin: impl AsRef<str>) {
+    async fn drop(self: &Arc<Self>, origin: impl AsRef<str>) {
         self.cached.write().await.remove(origin.as_ref());
+        debug!("Resource {} dropped", origin.as_ref());
     }
 }
 
@@ -170,7 +173,12 @@ impl CacheItem {
     }
 
     async fn try_load_resource(&self) -> Result<CacheResult, anyhow::Error> {
+        debug!("Start downloading for {}", self.origin);
         let (bytes, content_type) = download(&self.origin).await?;
+        debug!(
+            "Finish downloading for {} with mime {}",
+            self.origin, content_type
+        );
 
         Ok(CacheResult {
             bytes,

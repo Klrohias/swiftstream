@@ -7,7 +7,11 @@ use serde::Deserialize;
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub listen_addr: String,
-    pub limit: Option<usize>,
+    pub base_url: String,
+    pub size_limit: Option<usize>,
+    pub cache_expire: Option<u16>,
+    pub track_expire: Option<u16>,
+    pub track_interval: Option<u16>,
     pub upstreams: HashMap<String, UpstreamConfig>,
 }
 

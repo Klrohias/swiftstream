@@ -35,7 +35,7 @@ pub fn parse_http_ranges(value: impl AsRef<str>) -> Result<Vec<HttpRange>, HttpR
     for range_vec in value
         .split(',')
         .map(|x| x.trim())
-        .map(|x| x.split('-').collect::<Vec<&str>>())
+        .map(|x| x.split('-').collect::<Vec<_>>())
     {
         if range_vec.len() != 2 {
             return Err(HttpRangeParseError::InvalidRange);
