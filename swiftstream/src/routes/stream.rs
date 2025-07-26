@@ -18,13 +18,13 @@ use crate::{
 };
 
 #[derive(Deserialize)]
-pub struct StreamRequest {
+pub struct StreamQuery {
     pub origin: String,
 }
 
 pub async fn get_stream(
     State(state): State<AppStateRef>,
-    Query(query): Query<StreamRequest>,
+    Query(query): Query<StreamQuery>,
     headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
     let data = state.cache_pool.get(&query.origin).await;
@@ -56,10 +56,10 @@ pub async fn get_stream(
                 .into_iter()
                 .map(|x| (x, Cursor::new(data.bytes.clone())))
                 .map(|mut x| match x.0 {
-                    HttpRange::Prefix(len) => x.1.take(len),
-                    HttpRange::Suffix(len) => {
-                        _ = x.1.seek(SeekFrom::End(-(len).try_into().unwrap_or(0)));
-                        x.1.take(len)
+                    HttpRange::Suffix(len) => x.1.take(len),
+                    HttpRange::Prefix(len) => {
+                        _ = x.1.seek(SeekFrom::Start(len));
+                        x.1.take(u64::MAX)
                     }
                     HttpRange::Range(from, to) => {
                         _ = x.1.seek(SeekFrom::Start(from));

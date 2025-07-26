@@ -11,7 +11,7 @@ use reqwest::Client;
 use tokio::{sync::RwLock, time::sleep};
 use url::Url;
 
-use crate::caching::CachePool;
+use crate::{caching::CachePool, transfer::parse_m3u8_async};
 
 pub struct StreamTrackingPool {
     tracking: RwLock<HashMap<String, Arc<TrackingItem>>>,
@@ -137,18 +137,16 @@ impl TrackingItem {
         &self,
         tracking_pool: &Arc<StreamTrackingPool>,
     ) -> Result<(), anyhow::Error> {
-        let response = tracking_pool.http_client.get(&self.origin).send().await?;
-        let data = response.bytes().await?;
+        let data = tracking_pool
+            .http_client
+            .get(&self.origin)
+            .send()
+            .await?
+            .bytes()
+            .await?;
 
         // parse
-        let playlist = tokio::task::spawn_blocking(move || {
-            let mut parser = mediastream_rs::Parser::new(Cursor::new(data));
-            if let Err(e) = parser.parse() {
-                return Err(e);
-            }
-            Ok(parser.get_result())
-        })
-        .await??;
+        let playlist = parse_m3u8_async(Cursor::new(data)).await?;
 
         self.prepare_all(tracking_pool, &self.origin, playlist)
             .await?;

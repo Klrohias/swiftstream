@@ -9,10 +9,10 @@ use mediastream_rs::format::M3uPlaylist;
 use serde::Deserialize;
 use url::Url;
 
-use crate::{AppStateRef, internal_error_with_log};
+use crate::{AppStateRef, internal_error_with_log, transfer::parse_m3u8_async};
 
 #[derive(Deserialize)]
-pub struct MediaRequest {
+pub struct MediaQuery {
     origin: String,
 }
 
@@ -46,28 +46,24 @@ async fn prepare_all(
 
 pub async fn get_media(
     State(state): State<AppStateRef>,
-    Query(query): Query<MediaRequest>,
+    Query(query): Query<MediaQuery>,
 ) -> Result<Response, StatusCode> {
-    let response = state
+    let data = state
         .http_client
         .get(&query.origin)
         .send()
         .await
+        .map_err(internal_error_with_log!())?
+        .bytes()
+        .await
         .map_err(internal_error_with_log!())?;
-    let data = response.bytes().await.map_err(internal_error_with_log!())?;
+
     state.tracking_pool.track(&query.origin).await;
 
     // parse
-    let mut playlist = tokio::task::spawn_blocking(move || {
-        let mut parser = mediastream_rs::Parser::new(Cursor::new(data));
-        if let Err(e) = parser.parse() {
-            return Err(e);
-        }
-        Ok(parser.get_result())
-    })
-    .await
-    .map_err(internal_error_with_log!())?
-    .map_err(internal_error_with_log!())?;
+    let mut playlist = parse_m3u8_async(Cursor::new(data))
+        .await
+        .map_err(internal_error_with_log!())?;
 
     prepare_all(&state, &mut playlist, query.origin)
         .await
