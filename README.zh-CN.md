@@ -12,6 +12,43 @@ SwiftStream 是一款用 Rust 编写的高性能 HLS (m3u8) 流媒体加速器�
 - 📊 可自定义缓存配置  
 
 ## 使用指南
+
+
+<details>
+
+<summary>使用 Docker 运行</summary>
+
+1. 编写 `docker-compose.yml`  
+
+    ```yaml
+    services:
+      swiftstream:
+        image: ghcr.io/klrohias/swiftstream:latest
+        container_name: swiftstream
+        restart: always
+        ports:
+          - <对外公开的端口>:<在 listenAddr 中的端口>
+        network_mode: bridge
+        volumes:
+          - /配置文件路径/config.yml:/config.yml
+    ```
+
+2. 配置  
+
+    参见 [配置说明](#配置说明)  
+
+    > [!NOTE]
+    > 通常 `baseUrl` 中的端口应该与 `对外公开的端口` 的端口相同
+
+3. 运行容器  
+
+    ```shell
+    docker compose up -d
+    ```
+
+</details>
+
+
 <details>
 
 <summary>自行构建并运行</summary>
@@ -29,6 +66,31 @@ SwiftStream 是一款用 Rust 编写的高性能 HLS (m3u8) 流媒体加速器�
 3. 运行  
     ```shell
     ./target/release/swiftstream
+    ```
+
+</details>
+
+
+<details>
+
+<summary>在播放器中使用</summary>
+
+1. 对于频道列表（可能有一或多个频道在一起的 m3u）  
+    ```
+    {baseUrl}/playlist?origin={originUrl}
+    ```
+    例如:
+    ```
+    http://127.0.0.1:11451/playlist?origin=http://some-website.com/my-tv-program-list.m3u8
+    ```
+
+2. 对于单条 HLS 流（正在播放某一频道的一条流）  
+    ```
+    {baseUrl}/media?origin={originUrl}
+    ```
+    例如:
+    ```
+    http://127.0.0.1:11451/media?origin=http://some-website.com/stream-such-as-BBC.m3u8
     ```
 
 </details>

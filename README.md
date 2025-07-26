@@ -12,6 +12,41 @@ SwiftStream is a high-performance HLS (m3u8) streaming accelerator written in Ru
 - 📊 Configurable cache settings  
 
 ## Usage
+
+<details>
+
+<summary>Run with Docker</summary>
+
+1. Write your `docker-compose.yml`  
+
+    ```yaml
+    services:
+      swiftstream:
+        image: ghcr.io/klrohias/swiftstream:latest
+        container_name: swiftstream
+        restart: always
+        ports:
+          - <your_expose_port>:<port_in_listenAddr>
+        network_mode: bridge
+        volumes:
+          - /path/to/config.yml:/config.yml
+    ```
+
+2. Configuration  
+
+    See [Configuration](#configuration)  
+    
+    > [!NOTE]
+    > Normally, port in `baseUrl` should be same as the expose port
+
+3. Run  
+
+    ```shell
+    docker compose up -d
+    ```
+
+</details>
+
 <details>
 
 <summary>Build and run</summary>
@@ -32,6 +67,30 @@ SwiftStream is a high-performance HLS (m3u8) streaming accelerator written in Ru
 
     ```shell
     ./target/release/swiftstream
+    ```
+
+</details>
+
+<details>
+
+<summary>Use in your player</summary>
+
+1. For channels list  
+    ```
+    {baseUrl}/playlist?origin={originUrl}
+    ```
+    Example:
+    ```
+    http://127.0.0.1:11451/playlist?origin=http://some-website.com/my-tv-program-list.m3u8
+    ```
+
+2. For a single HLS stream  
+    ```
+    {baseUrl}/media?origin={originUrl}
+    ```
+    Example:
+    ```
+    http://127.0.0.1:11451/media?origin=http://some-website.com/stream-such-as-BBC.m3u8
     ```
 
 </details>
