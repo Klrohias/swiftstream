@@ -1,6 +1,7 @@
 use crate::format::{M3uMedia, M3uPlaylist, directives};
 
 impl ToString for M3uPlaylist {
+    /// Convert the M3uPlaylist to content of m3u8 file
     fn to_string(&self) -> String {
         let mut result = "#EXTM3U".to_string();
         // header
@@ -29,6 +30,7 @@ impl ToString for M3uPlaylist {
 }
 
 impl ToString for M3uMedia {
+    /// Convert the M3uMedia to content of m3u8 file
     fn to_string(&self) -> String {
         let mut result = String::new();
 
