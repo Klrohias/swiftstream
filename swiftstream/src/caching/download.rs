@@ -27,8 +27,11 @@ impl From<reqwest::Error> for DownloadError {
     }
 }
 
-pub async fn download(origin: impl AsRef<str>) -> Result<(Arc<[u8]>, String), DownloadError> {
-    let response = Client::new().get(origin.as_ref()).send().await?;
+pub async fn download(
+    origin: impl AsRef<str>,
+    http_client: impl AsRef<Client>,
+) -> Result<(Arc<[u8]>, String), DownloadError> {
+    let response = http_client.as_ref().get(origin.as_ref()).send().await?;
 
     if !response.status().is_success() {
         return Err(DownloadError::RequestNotSuccess(response.status().as_u16()));

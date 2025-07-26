@@ -25,3 +25,4 @@ tokio-util = { version = "0.7.15", features = ["io", "io-util"] }
 mediastream-rs = { path = "../mediastream-rs" }
 url = "2.5.4"
 urlencoding = "2.1.3"
+typed-container = { path = "../typed-container" }

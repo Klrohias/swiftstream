@@ -33,11 +33,13 @@ impl ToString for M3uMedia {
         let mut result = String::new();
 
         // extension data
-        for it in self
-            .extension_data
-            .iter()
-            .map(|(key, value)| format!("{}:{}\n", key, value))
-        {
+        for it in self.extension_data.iter().map(|(key, value)| {
+            if value.is_none() {
+                key.to_string()
+            } else {
+                format!("{}:{}\n", key, value.as_ref().unwrap())
+            }
+        }) {
             result.push_str(&it);
         }
 

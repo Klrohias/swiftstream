@@ -1,4 +1,5 @@
 use log::{debug, error};
+use reqwest::Client;
 use std::{
     collections::HashMap,
     sync::Arc,
@@ -17,6 +18,7 @@ pub struct CachePool {
     cached: RwLock<HashMap<String, Arc<CacheItem>>>,
     time_limit_secs: u16,
     size_limit: usize,
+    http_client: Arc<Client>,
 }
 
 #[derive(Clone, Debug)]
@@ -26,11 +28,12 @@ pub struct CacheResult {
 }
 
 impl CachePool {
-    pub fn new(size_limit: usize, time_limit_secs: u16) -> Arc<Self> {
+    pub fn new(size_limit: usize, time_limit_secs: u16, http_client: Arc<Client>) -> Arc<Self> {
         Arc::new(CachePool {
             cached: RwLock::new(HashMap::new()),
             size_limit,
             time_limit_secs,
+            http_client,
         })
     }
 
@@ -139,7 +142,7 @@ impl CacheItem {
         tokio::select! {
             _ = cancel_rx => {},
             _ = async {
-                    self.load_resource().await;
+                    self.load_resource(&cache_pool).await;
                     // wait for expire
                     self.wait_for_expire().await;
             } => {}
@@ -149,7 +152,7 @@ impl CacheItem {
         cache_pool.drop(&self.origin).await;
     }
 
-    async fn load_resource(&self) {
+    async fn load_resource(&self, cache_pool: &Arc<CachePool>) {
         let mut write_lock = self.data.write().await;
         loop {
             let expire = self.expire.read().await.clone();
@@ -160,7 +163,7 @@ impl CacheItem {
             }
 
             // try load
-            match self.try_load_resource().await {
+            match self.try_load_resource(cache_pool).await {
                 Err(e) => {
                     error!("Error while load resource {}: {}", self.origin, e);
                 }
@@ -172,9 +175,12 @@ impl CacheItem {
         }
     }
 
-    async fn try_load_resource(&self) -> Result<CacheResult, anyhow::Error> {
+    async fn try_load_resource(
+        &self,
+        cache_pool: &Arc<CachePool>,
+    ) -> Result<CacheResult, anyhow::Error> {
         debug!("Start downloading for {}", self.origin);
-        let (bytes, content_type) = download(&self.origin).await?;
+        let (bytes, content_type) = download(&self.origin, &cache_pool.http_client).await?;
         debug!(
             "Finish downloading for {} with mime {}",
             self.origin, content_type

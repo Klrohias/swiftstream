@@ -151,17 +151,14 @@ impl<T: BufRead + Seek + 'static> ParserImpl<T> {
     }
 
     fn parse_directive(&mut self, line: String) -> Result<(), ParseError> {
-        let key = line.chars().take_while(|x| *x != ':').collect::<SmolStr>();
-        let value = line
-            .chars()
-            .skip_while(|x| *x != ':')
-            .skip(1)
-            .collect::<SmolStr>();
+        let mut splited_line = line.splitn(2, ':');
+        let key = splited_line.next().unwrap().into();
+        let value = splited_line.next().map(|x| x.into());
 
         if key == directives::EXTINF {
-            self.parse_media_info(value)?;
+            self.parse_media_info(value.unwrap_or_default())?;
         } else if key == directives::PLAYLIST {
-            self.playlist.title = Some(value);
+            self.playlist.title = Some(value.unwrap_or_default());
         } else {
             self.media.extension_data.insert(key, value);
         }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use reqwest::Client;
+use typed_container::Container;
 
 use crate::{
     Config,
@@ -9,32 +10,42 @@ use crate::{
 
 pub type AppStateRef = Arc<AppState>;
 pub struct AppState {
-    pub config: Config,
+    pub config: Arc<Config>,
     pub cache_pool: Arc<CachePool>,
     pub tracking_pool: Arc<StreamTrackingPool>,
-    /// For request the m3u file, instead of request cached ts
     pub http_client: Arc<Client>,
 }
 
 impl AppState {
     pub fn new(config: Config) -> Self {
-        let http_client = Arc::new(Client::new());
-        let cache_pool = CachePool::new(
-            config.size_limit.unwrap_or(512 * 1024 * 1024), // 512MB
-            config.cache_expire.unwrap_or(30),              // 30s
-        );
-        let tracking_pool = StreamTrackingPool::new(
-            config.track_expire.unwrap_or(60),  // 60s
-            config.track_interval.unwrap_or(5), // 5s
-            cache_pool.clone(),
-            http_client.clone(),
-        );
+        let config = Arc::new(config);
+        let container = Container::new();
+        container.register_constructor(|_| Arc::new(Client::new()));
+
+        let config_cloned = config.clone();
+        container.register_constructor(move |x| {
+            CachePool::new(
+                config_cloned.size_limit.unwrap_or(512 * 1024 * 1024), // 512MB
+                config_cloned.cache_expire.unwrap_or(30),              // 30s
+                x.get(),
+            )
+        });
+
+        let config_cloned = config.clone();
+        container.register_constructor(move |x| {
+            StreamTrackingPool::new(
+                config_cloned.track_expire.unwrap_or(60),  // 60s
+                config_cloned.track_interval.unwrap_or(5), // 5s
+                x.get(),
+                x.get(),
+            )
+        });
 
         Self {
             config,
-            cache_pool,
-            tracking_pool,
-            http_client,
+            cache_pool: container.get(),
+            tracking_pool: container.get(),
+            http_client: container.get(),
         }
     }
 }
