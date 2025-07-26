@@ -1,5 +1,7 @@
 use std::{error::Error, fmt::Display, str::FromStr};
 
+use smol_str::SmolStr;
+
 pub enum HttpRange {
     Range(u64, u64),
     Suffix(u64),
@@ -33,6 +35,9 @@ pub fn parse_http_ranges(value: impl AsRef<str>) -> Result<Vec<HttpRange>, HttpR
 
     let mut result = Vec::new();
     for range_vec in value
+        .chars()
+        .skip(6)
+        .collect::<SmolStr>()
         .split(',')
         .map(|x| x.trim())
         .map(|x| x.split('-').collect::<Vec<_>>())

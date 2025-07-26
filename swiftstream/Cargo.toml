@@ -26,3 +26,4 @@ mediastream-rs = { path = "../mediastream-rs" }
 url = "2.5.4"
 urlencoding = "2.1.3"
 typed-container = { path = "../typed-container" }
+smol_str = "0.3.2"
