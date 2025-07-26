@@ -1,75 +1,61 @@
+use std::fmt::Display;
+
 use crate::format::{M3uMedia, M3uPlaylist, directives};
 
-impl ToString for M3uPlaylist {
-    /// Convert the M3uPlaylist to content of m3u8 file
-    fn to_string(&self) -> String {
-        let mut result = "#EXTM3U".to_string();
+impl Display for M3uPlaylist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // header
-        let header = self
-            .attributes
-            .iter()
-            .map(|(key, value)| format!("{}=\"{}\"", key, value))
-            .collect::<Vec<_>>()
-            .join(" ");
-        result.push_str(&header);
-        result.push('\n');
+        write!(f, "{}", directives::EXTM3U)?;
+        for (key, value) in self.attributes.iter() {
+            write!(f, " {}=\"{}\"", key, value)?;
+        }
+        write!(f, "\n")?;
 
         // title
         if self.title.is_some() {
-            let line = format!("#PLAYLIST:{}\n", self.title.as_ref().unwrap());
-            result.push_str(&line);
+            writeln!(
+                f,
+                "{}:{}",
+                directives::PLAYLIST,
+                self.title.as_ref().unwrap()
+            )?;
         }
 
         // medias
-        for it in self.medias.iter().map(|x| x.to_string()) {
-            result.push_str(&it);
+        for it in self.medias.iter() {
+            write!(f, "\n")?;
+            it.fmt(f)?;
         }
 
-        result
+        Ok(())
     }
 }
 
-impl ToString for M3uMedia {
-    /// Convert the M3uMedia to content of m3u8 file
-    fn to_string(&self) -> String {
-        let mut result = String::new();
-
+impl Display for M3uMedia {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // extension data
-        for it in self.extension_data.iter().map(|(key, value)| {
+        for (key, value) in self.extension_data.iter() {
             if value.is_none() {
-                key.to_string()
+                writeln!(f, "{}", key)?;
             } else {
-                format!("{}:{}\n", key, value.as_ref().unwrap())
+                writeln!(f, "{}:{}", key, value.as_ref().unwrap())?;
             }
-        }) {
-            result.push_str(&it);
         }
 
         // #EXTINF:duration attributes...,name
-        let info = format!("{}:{}", directives::EXTINF, self.duration);
-        result.push_str(&info);
-
-        if !self.attributes.is_empty() {
-            result.push(' ');
-            let attribute_str = self
-                .attributes
-                .iter()
-                .map(|(key, value)| format!("{}=\"{}\"", key, value))
-                .collect::<Vec<_>>()
-                .join(" ");
-            result.push_str(&attribute_str);
+        write!(f, "{}:{}", directives::EXTINF, self.duration)?;
+        for (key, value) in self.attributes.iter() {
+            write!(f, " {}=\"{}\"", key, value)?;
         }
 
-        result.push(',');
+        write!(f, ",")?;
         if self.name.is_some() {
-            result.push_str(self.name.as_ref().unwrap());
+            write!(f, "{}", self.name.as_ref().unwrap())?;
         }
-        result.push('\n');
+        write!(f, "\n")?;
 
-        // location
-        result.push_str(&self.location);
-        result.push('\n');
+        writeln!(f, "{}", self.location)?;
 
-        result
+        Ok(())
     }
 }
