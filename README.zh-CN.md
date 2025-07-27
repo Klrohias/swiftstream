@@ -116,4 +116,7 @@ trackExpire: 30
 
 # trackInterval 媒体预加载间隔（单位：秒，默认值：5）
 trackInterval: 5
+
+# downloadThreads 下载线程的数量（默认值：1）
+downloadThreads: 1
 ```

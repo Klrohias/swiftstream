@@ -116,4 +116,7 @@ trackExpire: 30
 
 # trackExpire, the interval of starting to prepare a media (in seconds, default: 5)
 trackInterval: 5
+
+# downloadThreads, the count of downloader threads (default: 1)
+downloadThreads: 1
 ```
