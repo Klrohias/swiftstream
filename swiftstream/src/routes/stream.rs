@@ -22,24 +22,52 @@ pub struct StreamQuery {
     pub origin: String,
 }
 
+pub async fn get_stream_head(
+    State(state): State<AppStateRef>,
+    Query(query): Query<StreamQuery>,
+) -> Result<Response, StatusCode> {
+    let data = match state.cache_pool.get(&query.origin).await {
+        Err(e) => {
+            if e.kind() == io::ErrorKind::OutOfMemory {
+                return Ok(axum::http::Response::builder()
+                    .header(header::LOCATION, query.origin)
+                    .status(StatusCode::TEMPORARY_REDIRECT)
+                    .body(Body::empty())
+                    .map_err(internal_error_with_log!())?);
+            } else {
+                return Err(internal_error_with_log!()(e));
+            }
+        }
+        Ok(v) => v,
+    };
+
+    Ok(([
+        (header::CONTENT_TYPE, data.content_type),
+        (header::CONTENT_LENGTH, data.bytes.len().to_string()),
+        (header::ACCEPT_RANGES, "bytes".to_string()),
+    ])
+    .into_response())
+}
+
 pub async fn get_stream(
     State(state): State<AppStateRef>,
     Query(query): Query<StreamQuery>,
     headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
-    let data = state.cache_pool.get(&query.origin).await;
-    if data.is_err() {
-        if data.as_ref().unwrap_err().kind() == io::ErrorKind::OutOfMemory {
-            return Ok(axum::http::Response::builder()
-                .header(header::LOCATION, query.origin)
-                .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Body::empty())
-                .map_err(internal_error_with_log!())?);
-        } else {
-            data.as_ref().map_err(internal_error_with_log!())?;
+    let data = match state.cache_pool.get(&query.origin).await {
+        Err(e) => {
+            if e.kind() == io::ErrorKind::OutOfMemory {
+                return Ok(axum::http::Response::builder()
+                    .header(header::LOCATION, query.origin)
+                    .status(StatusCode::TEMPORARY_REDIRECT)
+                    .body(Body::empty())
+                    .map_err(internal_error_with_log!())?);
+            } else {
+                return Err(internal_error_with_log!()(e));
+            }
         }
-    }
-    let data = data.unwrap();
+        Ok(v) => v,
+    };
 
     // is it a Range request?
     let ranges = if let Some(range) = headers.get(header::RANGE) {
@@ -71,6 +99,7 @@ pub async fn get_stream(
 
         let response = Response::builder()
             .header(header::CONTENT_TYPE, data.content_type)
+            .header(header::ACCEPT_RANGES, "bytes")
             .body(Body::from_stream(body))
             .map_err(internal_error_with_log!())?;
 
@@ -84,6 +113,7 @@ pub async fn get_stream(
             [
                 (header::CONTENT_TYPE, data.content_type),
                 (header::CONTENT_LENGTH, length.to_string()),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
             ],
             Body::from_stream(body),
         )

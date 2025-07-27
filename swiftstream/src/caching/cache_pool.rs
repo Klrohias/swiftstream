@@ -1,39 +1,28 @@
 use log::{debug, error};
-use reqwest::Client;
+
 use std::{
     collections::HashMap,
     sync::Arc,
     time::{Duration, SystemTime},
 };
-use tokio::{
-    io,
-    sync::{Mutex, RwLock, oneshot},
-    task::yield_now,
-    time::sleep,
-};
+use tokio::{io, sync::RwLock, task::yield_now, time::sleep};
 
-use crate::caching::download;
+use crate::caching::{DownloadError, Downloader};
 
 pub struct CachePool {
     cached: RwLock<HashMap<String, Arc<CacheItem>>>,
     time_limit_secs: u16,
     size_limit: usize,
-    http_client: Arc<Client>,
-}
-
-#[derive(Clone, Debug)]
-pub struct CacheResult {
-    pub bytes: Arc<[u8]>,
-    pub content_type: String,
+    downloader: Arc<Downloader>,
 }
 
 impl CachePool {
-    pub fn new(size_limit: usize, time_limit_secs: u16, http_client: Arc<Client>) -> Arc<Self> {
+    pub fn new(size_limit: usize, time_limit_secs: u16, downloader: Arc<Downloader>) -> Arc<Self> {
         Arc::new(CachePool {
             cached: RwLock::new(HashMap::new()),
             size_limit,
             time_limit_secs,
-            http_client,
+            downloader,
         })
     }
 
@@ -68,16 +57,19 @@ impl CachePool {
         self.cached.write().await.insert(origin, result.clone());
 
         // worker startup
-        let worker_result_ref = result.clone();
+        let worker_item_ref = result.clone();
         let worker_self_ref = self.clone();
         tokio::spawn(async move {
-            worker_result_ref.manage_worker(worker_self_ref).await;
+            worker_self_ref.item_lifetime(worker_item_ref).await;
         });
 
         Some(result)
     }
 
-    pub async fn get(self: &Arc<Self>, origin: impl AsRef<str>) -> Result<CacheResult, io::Error> {
+    pub async fn get(
+        self: &Arc<Self>,
+        origin: impl AsRef<str>,
+    ) -> Result<CacheResource, io::Error> {
         let cache_item = self.get_internal(origin.as_ref().to_owned()).await;
         if cache_item.is_none() {
             return Err(io::Error::new(
@@ -105,13 +97,81 @@ impl CachePool {
         self.cached.write().await.remove(origin.as_ref());
         debug!("Resource {} dropped", origin.as_ref());
     }
+
+    async fn item_lifetime(self: &Arc<Self>, cache_item: Arc<CacheItem>) {
+        let cache_item = cache_item.as_ref();
+
+        // load resource
+        self.load_item_resource(cache_item).await;
+
+        // wait for expire
+        cache_item.wait_expire().await;
+
+        // drop the cache, finish
+        self.drop(&cache_item.origin).await;
+    }
+
+    async fn load_item_resource(self: &Arc<Self>, cache_item: &CacheItem) {
+        let mut write_lock = cache_item.data.write().await;
+        tokio::select! {
+            _ = cache_item.wait_expire() => {},
+            _ = async {
+                match self.try_load_item_resource(cache_item).await {
+                    Err(e) => {
+                        error!("Error while load resource {}: {}", cache_item.origin, e);
+                    }
+                    Ok(s) => {
+                        *write_lock = Some(s);
+                        return; // return and release the writer lock
+                    }
+                }
+            } => {}
+        };
+    }
+
+    async fn try_load_item_resource(
+        self: &Arc<Self>,
+        cache_item: &CacheItem,
+    ) -> Result<CacheResource, DownloadError> {
+        let origin = &cache_item.origin;
+        debug!("Start downloading for {}", origin);
+
+        // first download, with default thread count
+        let download_result = self.downloader.download(origin, None).await;
+        let (bytes, content_type) = match download_result {
+            Ok(v) => v,
+            Err(e) => {
+                if !e.is_range_not_supported() && !e.is_content_length_missing() {
+                    return Err(e);
+                }
+
+                // range not supported by server, try download with single thread,
+                // and return error if error occurred in this time
+                self.downloader.download(origin, Some(1)).await?
+            }
+        };
+        debug!(
+            "Finish downloading for {} with mime {}",
+            origin, content_type
+        );
+
+        Ok(CacheResource {
+            bytes,
+            content_type,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CacheResource {
+    pub bytes: Arc<[u8]>,
+    pub content_type: String,
 }
 
 struct CacheItem {
-    data: RwLock<Option<CacheResult>>,
+    data: RwLock<Option<CacheResource>>,
     origin: String,
     expire: RwLock<SystemTime>,
-    cancel_tx: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl CacheItem {
@@ -120,79 +180,10 @@ impl CacheItem {
             data: RwLock::new(None),
             origin,
             expire: RwLock::new(SystemTime::now() + Duration::from_secs(30)),
-            cancel_tx: Mutex::new(None),
         }
     }
 
-    pub async fn manage_worker(&self, cache_pool: Arc<CachePool>) {
-        let (tx, rx) = oneshot::channel();
-        {
-            let mut cancel_tx = self.cancel_tx.lock().await;
-            *cancel_tx = Some(tx);
-        }
-
-        self.manage_worker_internal(cache_pool, rx).await;
-    }
-
-    async fn manage_worker_internal(
-        &self,
-        cache_pool: Arc<CachePool>,
-        cancel_rx: oneshot::Receiver<()>,
-    ) {
-        tokio::select! {
-            _ = cancel_rx => {},
-            _ = async {
-                    self.load_resource(&cache_pool).await;
-                    // wait for expire
-                    self.wait_for_expire().await;
-            } => {}
-        };
-
-        // expired, drop my self
-        cache_pool.drop(&self.origin).await;
-    }
-
-    async fn load_resource(&self, cache_pool: &Arc<CachePool>) {
-        let mut write_lock = self.data.write().await;
-        loop {
-            let expire = self.expire.read().await.clone();
-            let now = SystemTime::now();
-            if expire < now {
-                // expired
-                break;
-            }
-
-            // try load
-            match self.try_load_resource(cache_pool).await {
-                Err(e) => {
-                    error!("Error while load resource {}: {}", self.origin, e);
-                }
-                Ok(s) => {
-                    *write_lock = Some(s);
-                    break; // break and release the writer lock
-                }
-            }
-        }
-    }
-
-    async fn try_load_resource(
-        &self,
-        cache_pool: &Arc<CachePool>,
-    ) -> Result<CacheResult, anyhow::Error> {
-        debug!("Start downloading for {}", self.origin);
-        let (bytes, content_type) = download(&self.origin, &cache_pool.http_client).await?;
-        debug!(
-            "Finish downloading for {} with mime {}",
-            self.origin, content_type
-        );
-
-        Ok(CacheResult {
-            bytes,
-            content_type,
-        })
-    }
-
-    async fn wait_for_expire(&self) {
+    pub async fn wait_expire(&self) {
         loop {
             let expire = self.expire.read().await.clone();
             let now = SystemTime::now();
@@ -211,7 +202,7 @@ impl CacheItem {
         *expire_ref = expire;
     }
 
-    pub async fn get_resource(&self) -> Option<CacheResult> {
+    pub async fn get_resource(&self) -> Option<CacheResource> {
         // wait until loaded (writer lock will release then, so we can just await the reader lock)
         let data = self.data.read().await;
         data.as_ref().map(|x| x.clone())

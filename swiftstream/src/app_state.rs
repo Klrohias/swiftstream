@@ -5,7 +5,7 @@ use typed_container::Container;
 
 use crate::{
     Config,
-    caching::{CachePool, StreamTrackingPool},
+    caching::{CachePool, Downloader, StreamTrackingPool},
 };
 
 pub type AppStateRef = Arc<AppState>;
@@ -24,6 +24,14 @@ impl AppState {
 
         let config_cloned = config.clone();
         container.register_constructor(move |x| {
+            Arc::new(Downloader::new(
+                x.get(),
+                config_cloned.download_threads.unwrap_or(1), // default single thread
+            ))
+        });
+
+        let config_cloned = config.clone();
+        container.register_constructor(move |x| {
             CachePool::new(
                 config_cloned.size_limit.unwrap_or(512 * 1024 * 1024), // 512MB
                 config_cloned.cache_expire.unwrap_or(30),              // 30s
@@ -35,7 +43,7 @@ impl AppState {
         container.register_constructor(move |x| {
             StreamTrackingPool::new(
                 config_cloned.track_expire.unwrap_or(60),  // 60s
-                config_cloned.track_interval.unwrap_or(5), // 5s
+                config_cloned.track_interval.unwrap_or(8), // 8s
                 x.get(),
                 x.get(),
             )

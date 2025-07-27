@@ -12,6 +12,7 @@ pub struct Config {
     pub cache_expire: Option<u16>,
     pub track_expire: Option<u16>,
     pub track_interval: Option<u16>,
+    pub download_threads: Option<u8>,
 }
 
 pub fn load_config(path: impl AsRef<Path>) -> Result<Config> {

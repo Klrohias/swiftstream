@@ -94,10 +94,10 @@ impl TrackingItem {
             }
 
             // keep track
-            debug!("Keep track of {}", self.origin);
             if let Err(e) = self.keep_track(&tracking_pool).await {
                 warn!("Error while keep track of {}: {}", self.origin, e);
             }
+            debug!("Kept track of {}", self.origin);
 
             // or wait...
             tokio::select! {
