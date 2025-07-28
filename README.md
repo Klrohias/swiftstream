@@ -36,8 +36,7 @@ SwiftStream is a high-performance HLS (m3u8) streaming accelerator written in Ru
 
     See [Configuration](#configuration)  
     
-    > [!NOTE]
-    > Normally, port in `baseUrl` should be same as the expose port
+    > NOTE: Normally, port in `baseUrl` should be same as the expose port
 
 3. Run  
 

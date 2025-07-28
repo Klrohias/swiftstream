@@ -21,7 +21,7 @@ let mut parser = Parser::new(Cursor::new(r#"
 #EXTINF:1 tvg-id="a" provider-type="iptv",A
 http://example.com/A.m3u8"#));
 parser.parse().unwrap();
-let result = parser.get_result();
+let result = parser.get_playlist();
 // Do your works with result...
 
 // 2. Generate

@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::Display,
-    io::{self, BufRead, Seek},
+    io::{self, BufRead},
     mem::swap,
 };
 
@@ -11,110 +11,6 @@ use regex::Regex;
 use smol_str::SmolStr;
 
 use crate::format::{M3uMedia, M3uPlaylist, directives};
-
-/// A parser to parse M3U/M3U8 file.
-///
-/// Example:
-/// ```rust
-/// use mediastream_rs::Parser;
-/// use std::io::Cursor;
-///
-/// let mut parser = Parser::new(Cursor::new(r#"
-/// #EXTM3U x-tvg-url="test"
-/// #EXTINF:1 tvg-id="a" provider-type="iptv",A
-/// http://example.com/A.m3u8"#));
-/// parser.parse().unwrap();
-/// let _result = parser.get_result();
-/// ```
-pub struct Parser(Box<dyn ParserImplTrait>);
-
-impl Parser {
-    /// Create a parser from a stream (`BufRead + Seek + 'static`)
-    ///
-    /// Example:
-    /// ```rust
-    /// use mediastream_rs::Parser;
-    /// use std::io::Cursor;
-    ///
-    /// let mut parser = Parser::new(Cursor::new(r#"
-    /// #EXTM3U x-tvg-url="test"
-    /// #EXTINF:1 tvg-id="a" provider-type="iptv",A
-    /// http://example.com/A.m3u8"#));
-    /// ```
-    pub fn new<T: BufRead + Seek + 'static>(reader: T) -> Self {
-        Self(Box::new(ParserImpl::new(reader)))
-    }
-
-    /// Parse the content from the stream until EOF, and return the error if occurred
-    ///
-    /// Example:
-    /// ```rust
-    /// use mediastream_rs::Parser;
-    /// use std::io::Cursor;
-    ///
-    /// let mut parser = Parser::new(Cursor::new(r#"
-    /// #EXTM3U x-tvg-url="test"
-    /// #EXTINF:1 tvg-id="a" provider-type="iptv",A
-    /// http://example.com/A.m3u8"#));
-    /// parser.parse().unwrap();
-    /// ```
-    pub fn parse(&mut self) -> Result<(), ParseError> {
-        self.0.parse()
-    }
-
-    /// Get the parsed `M3uPlaylist`, and you can continue the next parsing
-    ///
-    /// Example:
-    /// ```rust
-    /// use mediastream_rs::Parser;
-    /// use std::io::Cursor;
-    ///
-    /// let mut parser = Parser::new(Cursor::new(r#"
-    /// #EXTM3U x-tvg-url="test"
-    /// #EXTINF:1 tvg-id="a" provider-type="iptv",A
-    /// http://example.com/A.m3u8"#));
-    /// parser.parse().unwrap();
-    /// _ parser.get_result();
-    /// ```
-    pub fn get_result(&mut self) -> M3uPlaylist {
-        self.0.get_result()
-    }
-}
-
-/// Error occurred during parsing
-#[derive(Debug)]
-pub enum ParseError {
-    /// File doesn't start with `#EXTM3U`
-    NotAPlaylist,
-    /// `#EXTINF:<duration>`, the duration is missing
-    MissingDuration,
-    /// Unexpected EOF while parsing
-    UnexpectedEOF,
-    // IO error
-    IoError(io::Error),
-}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Self::NotAPlaylist => write!(f, "Not a playlist file"),
-            Self::IoError(e) => e.fmt(f),
-            Self::UnexpectedEOF => write!(f, "Unexpected EOF"),
-            Self::MissingDuration => write!(f, "Duration of a media is missing"),
-        }
-    }
-}
-impl Error for ParseError {}
-impl From<io::Error> for ParseError {
-    fn from(value: io::Error) -> Self {
-        Self::IoError(value)
-    }
-}
-
-trait ParserImplTrait {
-    fn parse(&mut self) -> Result<(), ParseError>;
-    fn get_result(&mut self) -> M3uPlaylist;
-}
 
 lazy_static! {
     /// From `https://github.com/Raiper34/m3u-parser-generator/blob/c8e479161dcc4ec3d5490631fa42a1647741481d/src/m3u-parser.ts#L52` (Modified)
@@ -133,14 +29,40 @@ fn parse_attributes(input: impl AsRef<str>) -> HashMap<SmolStr, SmolStr> {
     result
 }
 
-struct ParserImpl<T: BufRead + Seek + 'static> {
+/// A parser to parse M3U/M3U8 file.
+///
+/// Example:
+/// ```rust
+/// use mediastream_rs::Parser;
+/// use std::io::Cursor;
+///
+/// let mut parser = Parser::new(Cursor::new(r#"
+/// #EXTM3U x-tvg-url="test"
+/// #EXTINF:1 tvg-id="a" provider-type="iptv",A
+/// http://example.com/A.m3u8"#));
+/// parser.parse().unwrap();
+/// let _result = parser.get_playlist();
+/// ```
+pub struct Parser<T: BufRead> {
     reader: T,
     buffer: String,
     playlist: M3uPlaylist,
     media: M3uMedia,
 }
 
-impl<T: BufRead + Seek + 'static> ParserImpl<T> {
+impl<T: BufRead> Parser<T> {
+    /// Create a parser from a stream (`BufRead + Seek + 'static`)
+    ///
+    /// Example:
+    /// ```rust
+    /// use mediastream_rs::Parser;
+    /// use std::io::Cursor;
+    ///
+    /// let mut parser = Parser::new(Cursor::new(r#"
+    /// #EXTM3U x-tvg-url="test"
+    /// #EXTINF:1 tvg-id="a" provider-type="iptv",A
+    /// http://example.com/A.m3u8"#));
+    /// ```
     pub fn new(reader: T) -> Self {
         Self {
             reader,
@@ -148,6 +70,76 @@ impl<T: BufRead + Seek + 'static> ParserImpl<T> {
             playlist: M3uPlaylist::default(),
             media: M3uMedia::default(),
         }
+    }
+
+    /// Parse the content from the stream until EOF, and return the error if occurred
+    ///
+    /// Example:
+    /// ```rust
+    /// use mediastream_rs::Parser;
+    /// use std::io::Cursor;
+    ///
+    /// let mut parser = Parser::new(Cursor::new(r#"
+    /// #EXTM3U x-tvg-url="test"
+    /// #EXTINF:1 tvg-id="a" provider-type="iptv",A
+    /// http://example.com/A.m3u8"#));
+    /// parser.parse().unwrap();
+    /// ```
+    pub fn parse(&mut self) -> Result<(), ParseError> {
+        self.parse_m3u_header()?;
+
+        while let Some(line) = self.next_line()? {
+            if line.starts_with('#') {
+                // directive
+                self.parse_directive(line)?;
+            } else {
+                // media
+                self.media.location = SmolStr::new(line);
+                let mut media = M3uMedia::default();
+                swap(&mut self.media, &mut media);
+                self.playlist.medias.push(media);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the parsed `M3uPlaylist`, and you can continue the next parsing
+    ///
+    /// Example:
+    /// ```rust
+    /// use mediastream_rs::Parser;
+    /// use std::io::Cursor;
+    ///
+    /// let mut parser = Parser::new(Cursor::new(r#"
+    /// #EXTM3U x-tvg-url="test"
+    /// #EXTINF:1 tvg-id="a" provider-type="iptv",A
+    /// http://example.com/A.m3u8"#));
+    /// parser.parse().unwrap();
+    /// _ = parser.get_playlist();
+    /// ```
+    pub fn get_playlist(&mut self) -> M3uPlaylist {
+        let mut result = M3uPlaylist::default();
+        swap(&mut self.playlist, &mut result);
+        result
+    }
+
+    /// Return the inner reader
+    ///
+    /// Example:
+    /// ```
+    /// use mediastream_rs::Parser;
+    /// use std::io::Cursor;
+    ///
+    /// let mut parser = Parser::new(Cursor::new(r#"
+    /// #EXTM3U x-tvg-url="test"
+    /// #EXTINF:1 tvg-id="a" provider-type="iptv",A
+    /// http://example.com/A.m3u8"#));
+    ///
+    /// let _the_cursor = parser.into_inner();
+    /// ```
+    pub fn into_inner(self) -> T {
+        self.reader
     }
 
     fn next_line(&mut self) -> Result<Option<String>, io::Error> {
@@ -225,30 +217,33 @@ impl<T: BufRead + Seek + 'static> ParserImpl<T> {
     }
 }
 
-impl<T: BufRead + Seek + 'static> ParserImplTrait for ParserImpl<T> {
-    fn parse(&mut self) -> Result<(), ParseError> {
-        self.parse_m3u_header()?;
+/// Error occurred during parsing
+#[derive(Debug)]
+pub enum ParseError {
+    /// File doesn't start with `#EXTM3U`
+    NotAPlaylist,
+    /// `#EXTINF:<duration>`, the duration is missing
+    MissingDuration,
+    /// Unexpected EOF while parsing
+    UnexpectedEOF,
+    // IO error
+    IoError(io::Error),
+}
 
-        while let Some(line) = self.next_line()? {
-            if line.starts_with('#') {
-                // directive
-                self.parse_directive(line)?;
-            } else {
-                // media
-                self.media.location = SmolStr::new(line);
-                let mut media = M3uMedia::default();
-                swap(&mut self.media, &mut media);
-                self.playlist.medias.push(media);
-            }
+impl Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Self::NotAPlaylist => write!(f, "Not a playlist file"),
+            Self::IoError(e) => e.fmt(f),
+            Self::UnexpectedEOF => write!(f, "Unexpected EOF"),
+            Self::MissingDuration => write!(f, "Duration of a media is missing"),
         }
-
-        Ok(())
     }
-
-    fn get_result(&mut self) -> M3uPlaylist {
-        let mut result = M3uPlaylist::default();
-        swap(&mut self.playlist, &mut result);
-        result
+}
+impl Error for ParseError {}
+impl From<io::Error> for ParseError {
+    fn from(value: io::Error) -> Self {
+        Self::IoError(value)
     }
 }
 
@@ -283,7 +278,7 @@ mod tests {
 21-35-08884.html";
         let mut parser = Parser::new(Cursor::new(data));
         parser.parse().unwrap();
-        let result = parser.get_result();
+        let result = parser.get_playlist();
         assert_eq!(result.medias.len(), 3);
     }
 
@@ -306,7 +301,7 @@ http://example.com/D.m3u8
 "#;
         let mut parser = Parser::new(Cursor::new(data));
         parser.parse().unwrap();
-        let result = parser.get_result();
+        let result = parser.get_playlist();
 
         assert_eq!(result.attributes.get("x-tvg-url").unwrap(), "test");
         assert_eq!(result.medias.len(), 4);

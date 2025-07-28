@@ -44,7 +44,7 @@ pub async fn parse_m3u8_async(
         if let Err(e) = parser.parse() {
             return Err(e);
         }
-        Ok(parser.get_result())
+        Ok(parser.get_playlist())
     })
     .await??)
 }
