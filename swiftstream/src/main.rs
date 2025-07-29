@@ -12,6 +12,8 @@ async fn build_app(app_state: &AppStateRef) -> Result<Router> {
 }
 
 async fn app_entry() -> Result<()> {
+    println!("SwiftStream v{}", env!("CARGO_PKG_VERSION"));
+
     let config = load_config(env::var("SS_CONFIG_PATH").unwrap_or_else(|_| "config.yml".into()))?;
     let app_state = Arc::new(AppState::new(config));
 
