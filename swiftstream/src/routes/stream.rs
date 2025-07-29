@@ -33,9 +33,9 @@ pub async fn get_stream_head(
                     .header(header::LOCATION, query.origin)
                     .status(StatusCode::TEMPORARY_REDIRECT)
                     .body(Body::empty())
-                    .map_err(internal_error_with_log!())?);
+                    .map_err(internal_error_with_log!("OOM, Redirect"))?);
             } else {
-                return Err(internal_error_with_log!()(e));
+                return Err(internal_error_with_log!("Query cache pool")(e));
             }
         }
         Ok(v) => v,
@@ -61,9 +61,9 @@ pub async fn get_stream(
                     .header(header::LOCATION, query.origin)
                     .status(StatusCode::TEMPORARY_REDIRECT)
                     .body(Body::empty())
-                    .map_err(internal_error_with_log!())?);
+                    .map_err(internal_error_with_log!("OOM, Redirect"))?);
             } else {
-                return Err(internal_error_with_log!()(e));
+                return Err(internal_error_with_log!("Query cache pool")(e));
             }
         }
         Ok(v) => v,
@@ -71,8 +71,11 @@ pub async fn get_stream(
 
     // is it a Range request?
     let ranges = if let Some(range) = headers.get(header::RANGE) {
-        let range_str = range.to_str().map_err(internal_error_with_log!())?;
-        let ranges = parse_http_ranges(range_str).map_err(bad_request_with_log!())?;
+        let range_str = range
+            .to_str()
+            .map_err(internal_error_with_log!("Read header: {}"))?;
+        let ranges =
+            parse_http_ranges(range_str).map_err(bad_request_with_log!("Parse range header"))?;
         Some(ranges)
     } else {
         None
@@ -101,7 +104,7 @@ pub async fn get_stream(
             .header(header::CONTENT_TYPE, data.content_type)
             .header(header::ACCEPT_RANGES, "bytes")
             .body(Body::from_stream(body))
-            .map_err(internal_error_with_log!())?;
+            .map_err(internal_error_with_log!("Generate range response"))?;
 
         return Ok(response);
     } else {

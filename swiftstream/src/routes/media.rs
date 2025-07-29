@@ -53,21 +53,21 @@ pub async fn get_media(
         .get(&query.origin)
         .send()
         .await
-        .map_err(internal_error_with_log!())?
+        .map_err(internal_error_with_log!("Request media"))?
         .bytes()
         .await
-        .map_err(internal_error_with_log!())?;
+        .map_err(internal_error_with_log!("Request bytes"))?;
 
     state.tracking_pool.track(&query.origin).await;
 
     // parse
     let mut playlist = parse_m3u8_async(Cursor::new(data))
         .await
-        .map_err(internal_error_with_log!())?;
+        .map_err(internal_error_with_log!("Parse m3u8"))?;
 
     prepare_all(&state, &mut playlist, query.origin)
         .await
-        .map_err(internal_error_with_log!())?;
+        .map_err(internal_error_with_log!("Start caching"))?;
 
     Ok(playlist.to_string().into_response())
 }

@@ -1,7 +1,4 @@
-use std::{
-    fmt::Display,
-    io::{BufRead, Seek},
-};
+use std::{fmt::Display, io::BufRead};
 
 use mediastream_rs::{ParseError, format::M3uPlaylist};
 use std::error::Error;
@@ -37,7 +34,7 @@ impl From<ParseError> for ParseM3U8Error {
 }
 
 pub async fn parse_m3u8_async(
-    stream: impl BufRead + Seek + Send + 'static,
+    stream: impl BufRead + Send + 'static,
 ) -> Result<M3uPlaylist, ParseM3U8Error> {
     Ok(tokio::task::spawn_blocking(move || {
         let mut parser = mediastream_rs::Parser::new(stream);

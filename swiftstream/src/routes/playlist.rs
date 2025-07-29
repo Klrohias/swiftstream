@@ -4,6 +4,7 @@ use axum::{
     extract::{Query, State},
     response::{IntoResponse, Response},
 };
+use log::warn;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use url::Url;
@@ -23,31 +24,56 @@ pub async fn get_playlist(
         .get(&query.origin)
         .send()
         .await
-        .map_err(internal_error_with_log!())?
+        .map_err(internal_error_with_log!("Request origin"))?
         .bytes()
         .await
-        .map_err(internal_error_with_log!())?;
+        .map_err(internal_error_with_log!("Request bytes"))?;
 
     let mut playlist = parse_m3u8_async(Cursor::new(data))
         .await
-        .map_err(internal_error_with_log!())?;
+        .map_err(internal_error_with_log!("Parse m3u8"))?;
 
-    let base = Url::parse(&query.origin).map_err(internal_error_with_log!())?;
+    let base = Url::parse(&query.origin).map_err(internal_error_with_log!("Parse url"))?;
 
     for media in playlist.medias.iter_mut() {
         let media_location = media.location.clone();
-        let mut location = Url::parse(&media_location);
-        if location == Err(url::ParseError::RelativeUrlWithoutBase) {
-            location = base.join(&media_location);
-        }
-        let location = location.map_err(internal_error_with_log!())?.to_string();
+        match Url::parse(&media_location) {
+            Err(url::ParseError::RelativeUrlWithoutBase) => {
+                // RelativeUrlWithoutBase, join with base url
+                let joined_url = base
+                    .join(&media_location)
+                    .map_err(internal_error_with_log!("Join url"))?;
 
-        media.location = format!(
-            "{}/media?origin={}",
-            state.config.base_url,
-            urlencoding::encode(&location)
-        )
-        .into();
+                media.location = format!(
+                    "{}/media?origin={}",
+                    state.config.base_url,
+                    urlencoding::encode(joined_url.as_str())
+                )
+                .into();
+            }
+            Err(another_err) => {
+                // another error, encode the url directly
+                warn!(
+                    "Failed to parse url {}, encode directly: {}",
+                    media_location, another_err
+                );
+
+                media.location = format!(
+                    "{}/media?origin={}",
+                    state.config.base_url,
+                    urlencoding::encode(&media_location)
+                )
+                .into();
+            }
+            Ok(v) => {
+                media.location = format!(
+                    "{}/media?origin={}",
+                    state.config.base_url,
+                    urlencoding::encode(v.as_str())
+                )
+                .into();
+            }
+        };
     }
 
     Ok(playlist.to_string().into_response())
