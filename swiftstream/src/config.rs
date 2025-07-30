@@ -13,6 +13,15 @@ pub struct Config {
     pub track_expire: Option<u16>,
     pub track_interval: Option<u16>,
     pub download_threads: Option<u8>,
+
+    #[serde(default)]
+    pub http: HttpConfig,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct HttpConfig {
+    pub proxy: Option<String>,
+    pub user_agent: Option<String>,
 }
 
 pub fn load_config(path: impl AsRef<Path>) -> Result<Config> {

@@ -18,7 +18,7 @@ pub struct StreamTrackingPool {
     time_limit_secs: u16,
     interval: Duration,
     cache_pool: Arc<CachePool>,
-    http_client: Arc<Client>,
+    http_client: Client,
 }
 
 impl StreamTrackingPool {
@@ -26,7 +26,7 @@ impl StreamTrackingPool {
         time_limit_secs: u16,
         interval_secs: u16,
         cache_pool: Arc<CachePool>,
-        http_client: Arc<Client>,
+        http_client: Client,
     ) -> Arc<Self> {
         Arc::new(Self {
             tracking: RwLock::new(HashMap::new()),

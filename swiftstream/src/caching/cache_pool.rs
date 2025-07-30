@@ -1,4 +1,4 @@
-use log::{debug, error};
+use log::{debug, error, warn};
 
 use std::{
     collections::HashMap,
@@ -144,6 +144,11 @@ impl CachePool {
                 if !e.is_range_not_supported() && !e.is_content_length_missing() {
                     return Err(e);
                 }
+
+                warn!(
+                    "Range not supported (err: {}), fallback to single-threaded for {}",
+                    e, origin
+                );
 
                 // range not supported by server, try download with single thread,
                 // and return error if error occurred in this time

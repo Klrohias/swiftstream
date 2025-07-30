@@ -5,12 +5,12 @@ use futures::future::join_all;
 use reqwest::{Client, header};
 
 pub struct Downloader {
-    http_client: Arc<Client>,
+    http_client: Client,
     default_threads: u8,
 }
 
 impl Downloader {
-    pub fn new(http_client: Arc<Client>, default_threads: u8) -> Self {
+    pub fn new(http_client: Client, default_threads: u8) -> Self {
         Downloader {
             http_client,
             default_threads,
@@ -46,7 +46,7 @@ impl Downloader {
     }
 
     async fn download_range(
-        http_client: Arc<Client>,
+        http_client: Client,
         origin: impl AsRef<str>,
         start: u64,
         end: u64,

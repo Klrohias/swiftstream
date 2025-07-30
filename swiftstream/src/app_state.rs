@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use reqwest::Client;
+use reqwest::{Client, Proxy};
 use typed_container::Container;
 
 use crate::{
@@ -13,14 +13,28 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub cache_pool: Arc<CachePool>,
     pub tracking_pool: Arc<StreamTrackingPool>,
-    pub http_client: Arc<Client>,
+    pub http_client: Client,
 }
 
 impl AppState {
     pub fn new(config: Config) -> Self {
         let config = Arc::new(config);
         let container = Container::new();
-        container.register_constructor(|_| Arc::new(Client::new()));
+
+        let config_cloned = config.clone();
+        container.register_constructor(move |_| {
+            let mut builder = Client::builder();
+
+            if let Some(user_agent) = &config_cloned.http.user_agent {
+                builder = builder.user_agent(user_agent)
+            }
+
+            if let Some(proxy) = &config_cloned.http.proxy {
+                builder = builder.proxy(Proxy::all(proxy).unwrap());
+            }
+
+            builder.build().unwrap()
+        });
 
         let config_cloned = config.clone();
         container.register_constructor(move |x| {
