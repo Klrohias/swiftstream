@@ -95,27 +95,6 @@ SwiftStream 是一款用 Rust 编写的高性能 HLS (m3u8) 流媒体加速器�
 </details>
 
 ## 配置说明
-程序默认从 `config.yml` 读取配置。如需指定自定义配置文件路径，请使用 `SS_CONFIG_PATH` 环境变量。
+程序默认从 `config.yml` 读取配置。如需指定自定义配置文件路径，请使用 `SS_CONFIG_PATH` 环境变量。  
 
-```yml
-# listenAddr 服务监听地址
-listenAddr: 0.0.0.0:19198
-
-# baseUrl 服务访问地址
-baseUrl: http://127.0.0.1:19198
-
-# sizeLimit 内存缓存上限（单位：字节，默认值：536870912）
-sizeLimit: 536870912 # 512 MB
-
-# cacheExpire TS分段缓存有效期（单位：秒，默认值：60）
-cacheExpire: 60
-
-# trackExpire 媒体资源跟踪有效期（单位：秒，默认值：30）
-trackExpire: 30
-
-# trackInterval 媒体预加载间隔（单位：秒，默认值：5）
-trackInterval: 5
-
-# downloadThreads 下载线程的数量（默认值：1）
-downloadThreads: 1
-```
+各配置项请见 [配置模板 `config.example.yaml`](./config.example.yml)

@@ -97,25 +97,4 @@ SwiftStream is a high-performance HLS (m3u8) streaming accelerator written in Ru
 ## Configuration
 The program defaults to reading the configuration from `config.yml`. If you need to customize the configuration file path, please use the `SS_CONFIG_PATH` environment variable.  
 
-```yml
-# listenAddr, where does your server run at
-listenAddr: 0.0.0.0:19198
-
-# baseUrl, where can you access to the server
-baseUrl: http://127.0.0.1:19198
-
-# sizeLimit, the maximum RAM size use for caching (in bytes, default: 536870912)
-sizeLimit: 536870912 # 512 MB
-
-# cacheExpire, the expire of cached ts segments (in seconds, default: 60)
-cacheExpire: 60
-
-# trackExpire, the expire of a media (in seconds, default: 30)
-trackExpire: 30
-
-# trackExpire, the interval of starting to prepare a media (in seconds, default: 5)
-trackInterval: 5
-
-# downloadThreads, the count of downloader threads (default: 1)
-downloadThreads: 1
-```
+See [config template `config.example.yml`](./config.example.yml).

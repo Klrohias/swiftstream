@@ -1,0 +1,29 @@
+# listenAddr, where does your server run at
+listenAddr: 0.0.0.0:19198
+
+# baseUrl, where can you access to the server
+baseUrl: http://127.0.0.1:19198
+
+# sizeLimit, the maximum RAM size use for caching (in bytes, optional, default: 536870912)
+sizeLimit: 536870912 # 512 MB
+
+# cacheExpire, the expire of cached ts segments (in seconds, optional, default: 60)
+cacheExpire: 60
+
+# trackExpire, the expire of a media (in seconds, optional, default: 30)
+trackExpire: 30
+
+# trackExpire, the interval of starting to prepare a media (in seconds, optional, default: 5)
+trackInterval: 5
+
+# downloadThreads, the count of downloader threads (optional, default: 1)
+downloadThreads: 1
+
+# http, some config entries about http (optional)
+http:
+  # userAgent, the User-Agent used when request to origin servers (optional)
+  userAgent: ...
+
+  # proxy, the proxy used when request to origin servers (optional)
+  # Example: socks://127.0.0.1:1080, http://127.0.0.1:8080
+  proxy: ...
