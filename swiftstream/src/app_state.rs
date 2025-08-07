@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log::info;
 use reqwest::{Client, Proxy};
 use typed_container::Container;
 
@@ -21,50 +22,47 @@ impl AppState {
         let config = Arc::new(config);
         let container = Container::new();
 
-        let config_cloned = config.clone();
-        container.register_constructor(move |_| {
+        container.register_constructor(|_| {
             let mut builder = Client::builder();
 
-            if let Some(user_agent) = &config_cloned.http.user_agent {
+            if let Some(user_agent) = &config.http.user_agent {
                 builder = builder.user_agent(user_agent)
             }
 
-            if let Some(proxy) = &config_cloned.http.proxy {
+            if let Some(proxy) = &config.http.proxy {
+                info!("With proxy: {}", proxy);
                 builder = builder.proxy(Proxy::all(proxy).unwrap());
             }
 
             builder.build().unwrap()
         });
 
-        let config_cloned = config.clone();
-        container.register_constructor(move |x| {
+        container.register_constructor(|x| {
             Arc::new(Downloader::new(
                 x.get(),
-                config_cloned.download_threads.unwrap_or(1), // default single thread
+                config.download_threads.unwrap_or(1), // default single thread
             ))
         });
 
-        let config_cloned = config.clone();
-        container.register_constructor(move |x| {
+        container.register_constructor(|x| {
             CachePool::new(
-                config_cloned.size_limit.unwrap_or(512 * 1024 * 1024), // 512MB
-                config_cloned.cache_expire.unwrap_or(30),              // 30s
+                config.size_limit.unwrap_or(512 * 1024 * 1024), // 512MB
+                config.cache_expire.unwrap_or(30),              // 30s
                 x.get(),
             )
         });
 
-        let config_cloned = config.clone();
-        container.register_constructor(move |x| {
+        container.register_constructor(|x| {
             StreamTrackingPool::new(
-                config_cloned.track_expire.unwrap_or(60),  // 60s
-                config_cloned.track_interval.unwrap_or(8), // 8s
+                config.track_expire.unwrap_or(60),  // 60s
+                config.track_interval.unwrap_or(8), // 8s
                 x.get(),
                 x.get(),
             )
         });
 
         Self {
-            config,
+            config: config.clone(),
             cache_pool: container.get(),
             tracking_pool: container.get(),
             http_client: container.get(),

@@ -1,6 +1,6 @@
 [package]
 name = "typed-container"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A simple container for IoC"
 license = "MIT"
@@ -8,5 +8,4 @@ homepage = "https://github.com/Klrohias/swiftstream/tree/main/typed-container"
 repository = "https://github.com/Klrohias/swiftstream"
 
 [dependencies]
-log = "0.4.27"
-smol_str = "0.3.2"
+derivative = "2.2.0"

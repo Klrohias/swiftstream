@@ -1,33 +1,30 @@
 use std::{
-    any::{Any, TypeId, type_name},
+    any::{Any, TypeId},
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 
-use log::warn;
-use smol_str::SmolStr;
-
-use crate::{GetServiceError, RegisterError};
+use crate::{Error, ErrorKind};
 
 #[derive(Clone)]
-pub struct Container(Arc<RwLock<ContainerImpl>>);
+pub struct Container<'a>(Arc<RwLock<ContainerImpl<'a>>>);
 
-impl Container {
+impl<'a> Container<'a> {
     pub fn new() -> Self {
         Self(Arc::new(RwLock::new(ContainerImpl::default())))
     }
 
-    fn register_internal(&self, boxed_service: BoxedService) -> Result<(), RegisterError> {
+    fn register_service_internal(&self, boxed_service: BoxedService) -> Result<(), ErrorKind> {
         {
-            let read = self.0.read()?;
+            let read = self.0.read().map_err(|_| ErrorKind::LockPoisoned)?;
 
             if read.services.contains_key(&boxed_service.type_id) {
-                return Err(RegisterError::Duplicated(boxed_service.type_name.into()));
+                return Err(ErrorKind::Duplicated);
             }
         }
 
         {
-            let mut write = self.0.write()?;
+            let mut write = self.0.write().map_err(|_| ErrorKind::LockPoisoned)?;
             write
                 .services
                 .insert(boxed_service.type_id.clone(), boxed_service);
@@ -38,20 +35,18 @@ impl Container {
 
     fn register_constructor_internal(
         &self,
-        boxed_constructor: BoxedConstructor,
-    ) -> Result<(), RegisterError> {
+        boxed_constructor: BoxedConstructor<'a>,
+    ) -> Result<(), ErrorKind> {
         {
-            let read = self.0.read()?;
+            let read = self.0.read().map_err(|_| ErrorKind::LockPoisoned)?;
 
             if read.constructors.contains_key(&boxed_constructor.type_id) {
-                return Err(RegisterError::Duplicated(
-                    boxed_constructor.type_name.into(),
-                ));
+                return Err(ErrorKind::Duplicated);
             }
         }
 
         {
-            let mut write = self.0.write()?;
+            let mut write = self.0.write().map_err(|_| ErrorKind::LockPoisoned)?;
             write
                 .constructors
                 .insert(boxed_constructor.type_id, Arc::new(boxed_constructor));
@@ -60,64 +55,83 @@ impl Container {
         Ok(())
     }
 
-    pub fn register<T: Clone + 'static>(&self, value: T) {
-        if let Err(e) = self.register_internal(BoxedService::from(value)) {
-            warn!("Failed to register service: {}", e);
+    pub fn construct<T: Clone + 'static>(&self) -> T {
+        self.try_construct().unwrap()
+    }
+
+    pub fn try_construct<T: Clone + 'static>(&self) -> Result<T, Error<T>> {
+        let type_id = TypeId::of::<T>();
+        let construct = {
+            let read = self.0.read()?;
+
+            read.constructors
+                .get(&type_id)
+                .ok_or(ErrorKind::NotFound)?
+                .clone()
+        };
+
+        match construct.construct::<T>(self.clone()) {
+            None => Err(ErrorKind::FailDowncast.into()),
+            Some(v) => Ok(v),
         }
     }
 
-    pub fn register_constructor<T: Clone + 'static>(
+    pub fn register_service<T: Clone + 'static>(&self, value: T) {
+        self.register_service_internal(BoxedService::from(value))
+            .unwrap()
+    }
+
+    pub fn try_register_service<T: Clone + 'static>(&self, value: T) -> Result<(), Error<T>> {
+        Ok(self.register_service_internal(BoxedService::from(value))?)
+    }
+
+    pub fn register_constructor<T: Clone + 'static>(&self, value: impl Fn(Container) -> T + 'a) {
+        self.register_constructor_internal(BoxedConstructor::from(value))
+            .unwrap()
+    }
+
+    pub fn try_register_constructor<T: Clone + 'static>(
         &self,
-        value: impl Fn(Container) -> T + 'static,
-    ) {
-        if let Err(e) = self.register_constructor_internal(BoxedConstructor::from(value)) {
-            warn!("Failed to register constructor: {}", e);
-        }
+        value: impl Fn(Container) -> T + 'a,
+    ) -> Result<(), Error<T>> {
+        Ok(self.register_constructor_internal(BoxedConstructor::from(value))?)
     }
 
     pub fn get<T: Clone + 'static>(&self) -> T {
         self.try_get().unwrap()
     }
 
-    pub fn try_get<T: Clone + 'static>(&self) -> Result<T, GetServiceError> {
+    pub fn try_get<T: Clone + 'static>(&self) -> Result<T, Error<T>> {
         let type_id = TypeId::of::<T>();
         {
             let read = self.0.read()?;
             if let Some(s) = read.services.get(&type_id) {
                 return match s.get_cloned() {
                     Some(v) => Ok(v),
-                    None => Err(GetServiceError::FailDowncast(type_name::<T>().into())),
+                    None => Err(ErrorKind::FailDowncast.into()),
                 };
             }
 
             if !read.constructors.contains_key(&type_id) {
-                return Err(GetServiceError::NotFound(type_name::<T>().into()));
+                return Err(ErrorKind::NotFound.into());
             }
         }
 
-        let constructor = {
-            let read = self.0.read()?;
-            read.constructors.get(&type_id).unwrap().clone()
-        };
+        let new_value = self.try_construct::<T>()?;
 
-        let new_value = constructor
-            .construct::<T>(self.clone())
-            .ok_or(GetServiceError::FailConstruct(type_name::<T>().into()))?;
-
-        self.register_internal(BoxedService::from(new_value.clone()))?;
+        self.register_service_internal(BoxedService::from(new_value.clone()))?;
         Ok(new_value)
     }
 }
 
 #[derive(Default)]
-struct ContainerImpl {
-    pub constructors: HashMap<TypeId, Arc<BoxedConstructor>>,
+struct ContainerImpl<'a> {
+    pub constructors: HashMap<TypeId, Arc<BoxedConstructor<'a>>>,
     pub services: HashMap<TypeId, BoxedService>,
 }
 
 struct BoxedService {
     pub type_id: TypeId,
-    pub type_name: SmolStr,
     pub value: Box<dyn Any>,
 }
 
@@ -131,19 +145,17 @@ impl<T: Clone + 'static> From<T> for BoxedService {
     fn from(value: T) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
-            type_name: type_name::<T>().into(),
             value: Box::new(value),
         }
     }
 }
 
-struct BoxedConstructor {
+struct BoxedConstructor<'a> {
     pub type_id: TypeId,
-    pub type_name: SmolStr,
-    pub value: Box<dyn Fn(Container) -> Box<dyn Any>>,
+    pub value: Box<dyn Fn(Container) -> Box<dyn Any> + 'a>,
 }
 
-impl BoxedConstructor {
+impl<'a> BoxedConstructor<'a> {
     fn construct<T: Clone + 'static>(&self, container: Container) -> Option<T> {
         let value = (self.value)(container).downcast::<T>();
         match value {
@@ -153,11 +165,10 @@ impl BoxedConstructor {
     }
 }
 
-impl<T: Clone + 'static, F: Fn(Container) -> T + 'static> From<F> for BoxedConstructor {
+impl<'a, T: Clone + 'static, F: Fn(Container) -> T + 'a> From<F> for BoxedConstructor<'a> {
     fn from(value: F) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
-            type_name: type_name::<T>().into(),
             value: Box::new(move |c| Box::new(value(c))),
         }
     }
@@ -172,8 +183,8 @@ mod tests {
     #[test]
     fn basic_register() {
         let c = Container::new();
-        c.register("A".to_string());
-        c.register(123 as u64);
+        c.register_service("A".to_string());
+        c.register_service(123 as u64);
 
         assert_eq!(c.get::<String>(), "A");
         assert_eq!(c.get::<u64>(), 123);
@@ -201,6 +212,7 @@ mod tests {
     }
 
     struct C;
+    #[derive(Clone)]
     struct D;
 
     #[test]
@@ -217,5 +229,17 @@ mod tests {
         c.register_constructor(|_| Arc::new(D));
 
         _ = c.get::<Arc<A>>();
+    }
+
+    #[test]
+    fn constructor_with_lifetime() {
+        let outside_string = "A".to_string();
+        let outside_d = D;
+
+        let c = Container::new();
+        c.register_constructor(|_| outside_string.clone());
+        c.register_constructor(|_| outside_d.clone());
+
+        assert_eq!(c.get::<String>(), "A");
     }
 }
