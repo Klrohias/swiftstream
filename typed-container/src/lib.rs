@@ -38,5 +38,6 @@
 
 mod container;
 mod errors;
+mod macros;
 pub use container::*;
 pub use errors::*;
