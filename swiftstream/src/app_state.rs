@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use log::info;
 use reqwest::{Client, Proxy};
 use typed_container::Container;
 
 use crate::{
     Config,
     caching::{CachePool, Downloader, StreamTrackingPool},
+    transfer::ProxyManager,
 };
 
 pub type AppStateRef = Arc<AppState>;
@@ -29,9 +29,14 @@ impl AppState {
                 builder = builder.user_agent(user_agent)
             }
 
-            if let Some(proxy) = &config.http.proxy {
-                info!("With proxy: {}", proxy);
-                builder = builder.proxy(Proxy::all(proxy).unwrap());
+            if let Some(proxies) = config.http.proxies.clone() {
+                let mut proxy_manager = ProxyManager::new();
+                proxy_manager.load_proxies(proxies).unwrap();
+
+                builder = builder.proxy(Proxy::custom(move |url| match url.host_str() {
+                    Some(hostname) => proxy_manager.get_proxy(hostname),
+                    None => None,
+                }));
             }
 
             builder.build().unwrap()

@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path};
+use std::{collections::HashMap, fs::File, path::Path};
 
 use anyhow::Result;
 use serde::Deserialize;
@@ -7,7 +7,7 @@ use serde::Deserialize;
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub listen_addr: String,
-    pub base_url: String,
+    pub base_url: Option<String>,
     pub size_limit: Option<usize>,
     pub cache_expire: Option<u16>,
     pub track_expire: Option<u16>,
@@ -20,7 +20,7 @@ pub struct Config {
 
 #[derive(Debug, Deserialize, Default)]
 pub struct HttpConfig {
-    pub proxy: Option<String>,
+    pub proxies: Option<HashMap<String, String>>,
     pub user_agent: Option<String>,
 }
 

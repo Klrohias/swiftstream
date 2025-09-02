@@ -1,7 +1,7 @@
 # listenAddr, where does your server run at
 listenAddr: 0.0.0.0:19198
 
-# baseUrl, where can you access to the server
+# baseUrl, where can you access to the server (optional, default is empty)
 baseUrl: http://127.0.0.1:19198
 
 # sizeLimit, the maximum RAM size use for caching (in bytes, optional, default: 536870912)
@@ -24,6 +24,7 @@ http:
   # userAgent, the User-Agent used when request to origin servers (optional)
   userAgent: ...
 
-  # proxy, the proxy used when request to origin servers (optional)
-  # Example: socks://127.0.0.1:1080, http://127.0.0.1:8080
-  proxy: ...
+  # proxies, the proxies used when request to origin servers (optional)
+  proxies:
+    raw.githubusercontent.com: http://127.0.0.1:8080 # Use `http://127.0.0.1:8080` for servers whose hostname contains `raw.githubusercontent.com`
+    fallback: http://127.0.0.1:8080 # For servers which no rule hits (optional)

@@ -35,8 +35,15 @@ pub async fn get_playlist(
 
     let base = Url::parse(&query.origin).map_err(internal_error_with_log!("Parse url"))?;
 
+    let base_url = state
+        .config
+        .base_url
+        .clone()
+        .unwrap_or_else(|| String::new());
+
     for media in playlist.medias.iter_mut() {
         let media_location = media.location.clone();
+
         match Url::parse(&media_location) {
             Err(url::ParseError::RelativeUrlWithoutBase) => {
                 // RelativeUrlWithoutBase, join with base url
@@ -46,7 +53,7 @@ pub async fn get_playlist(
 
                 media.location = format!(
                     "{}/media?origin={}",
-                    state.config.base_url,
+                    base_url,
                     urlencoding::encode(joined_url.as_str())
                 )
                 .into();
@@ -60,7 +67,7 @@ pub async fn get_playlist(
 
                 media.location = format!(
                     "{}/media?origin={}",
-                    state.config.base_url,
+                    base_url,
                     urlencoding::encode(&media_location)
                 )
                 .into();
@@ -68,7 +75,7 @@ pub async fn get_playlist(
             Ok(v) => {
                 media.location = format!(
                     "{}/media?origin={}",
-                    state.config.base_url,
+                    base_url,
                     urlencoding::encode(v.as_str())
                 )
                 .into();

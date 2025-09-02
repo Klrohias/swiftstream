@@ -21,21 +21,26 @@ async fn prepare_all(
     playlist: &mut M3uPlaylist,
     origin: impl AsRef<str>,
 ) -> Result<(), anyhow::Error> {
-    let base_url = Url::parse(origin.as_ref())?;
+    let origin_base_url = Url::parse(origin.as_ref())?;
+    let base_url = state
+        .config
+        .base_url
+        .clone()
+        .unwrap_or_else(|| String::new());
 
     // prepare all
     for media in playlist.medias.iter_mut() {
         let media_location = media.location.clone();
         let mut location = Url::parse(&media_location);
         if location == Err(url::ParseError::RelativeUrlWithoutBase) {
-            location = base_url.join(&media_location);
+            location = origin_base_url.join(&media_location);
         }
         let location = location?.to_string();
 
         state.cache_pool.prepare(&location).await;
         media.location = format!(
             "{}/stream?origin={}",
-            state.config.base_url,
+            base_url,
             urlencoding::encode(&location)
         )
         .into();
